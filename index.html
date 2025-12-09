@@ -48,13 +48,13 @@
         </div>
 
         <div class="mb-3">
-          <label class="form-label">Image URL (optional)</label>
-          <input type="url" name="imageUrl" class="form-control"
-                 placeholder="https://example.com/my-photo.jpg">
-          <div class="form-text">
-            Paste a link from Google Photos, iCloud, Imgur, etc.
-          </div>
-        </div>
+  <label class="form-label">Photo (optional)</label>
+  <input type="file" id="image-file" class="form-control" accept="image/*">
+  <div class="form-text">
+    Choose a photo from your computer or phone.
+  </div>
+</div>
+
 
         <button type="submit" class="btn btn-primary">Save entry</button>
       </form>
@@ -80,10 +80,16 @@
 
 <script>
   const API_URL = '/api/entries';
+
+  // --- Cloudinary Settings ---
+  const CLOUDINARY_CLOUD_NAME = 'do6mvy1l7';
+  const CLOUDINARY_UNSIGNED_PRESET = 'europe_journal_unsigned';
+
   const messageDiv = document.getElementById('message');
   const form = document.getElementById('entry-form');
   const entriesContainer = document.getElementById('entries-container');
   const countryFilter = document.getElementById('country-filter');
+  const imageFileInput = document.getElementById('image-file');
 
   let allEntries = [];
 
@@ -95,7 +101,7 @@
     }
     messageDiv.textContent = text;
     messageDiv.className = type === 'error' ? 'alert alert-danger' : 'alert alert-success';
-    setTimeout(() => showMessage('', ''), 4000);
+    setTimeout(() => showMessage('', ''), 3000);
   }
 
   async function fetchEntries() {
@@ -125,11 +131,7 @@
       countryFilter.appendChild(opt);
     });
 
-    if (countries.includes(current)) {
-      countryFilter.value = current;
-    } else {
-      countryFilter.value = 'All';
-    }
+    countryFilter.value = countries.includes(current) ? current : 'All';
   }
 
   function renderEntries() {
@@ -146,7 +148,7 @@
     entriesContainer.innerHTML = '';
     entriesToShow
       .slice()
-      .sort((a, b) => (b.date || '').localeCompare(a.date || ''))  // newest first
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
       .forEach(entry => {
         const div = document.createElement('div');
         div.className = 'mb-4';
@@ -184,20 +186,49 @@
       });
   }
 
+  // Upload an image file to Cloudinary
+  async function uploadImageToCloudinary(file) {
+    const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+    const data = new FormData();
+    data.append('file', file);
+    data.append('upload_preset', CLOUDINARY_UNSIGNED_PRESET);
+
+    const res = await fetch(url, {
+      method: 'POST',
+      body: data
+    });
+
+    if (!res.ok) throw new Error('Failed to upload image to Cloudinary');
+    const json = await res.json();
+    return json.secure_url; // Final usable image URL
+  }
+
+  // Submit form
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
 
     const formData = new FormData(form);
-    const payload = {
-      date: formData.get('date'),
-      country: formData.get('country'),
-      city: formData.get('city'),
-      title: formData.get('title'),
-      content: formData.get('content'),
-      imageUrl: formData.get('imageUrl'),
-    };
+
+    const file = imageFileInput.files[0];
+    let imageUrl = '';
 
     try {
+      // 1. Upload file to Cloudinary
+      if (file) {
+        showMessage('Uploading photo...', 'success');
+        imageUrl = await uploadImageToCloudinary(file);
+      }
+
+      // 2. Save entry to your Vercel API
+      const payload = {
+        date: formData.get('date'),
+        country: formData.get('country'),
+        city: formData.get('city'),
+        title: formData.get('title'),
+        content: formData.get('content'),
+        imageUrl: imageUrl,
+      };
+
       const res = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -214,10 +245,11 @@
 
       showMessage('Entry saved!', 'success');
       form.reset();
+      imageFileInput.value = '';
       await fetchEntries();
     } catch (err) {
       console.error(err);
-      showMessage('Network error while saving entry', 'error');
+      showMessage('Error while uploading/saving entry', 'error');
     }
   });
 
