@@ -1,8 +1,11 @@
 {
-  "name": "europe-travel-journal",
+  "name": "europe-journal",
   "version": "1.0.0",
   "scripts": {
     "dev": "vercel dev",
     "start": "vercel dev"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.7.0"
   }
 }
